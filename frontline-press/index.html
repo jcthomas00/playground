@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FrontLine Press — monthly variant builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root {
+    --ink: #16130E;
+    --paper: #FBFBF8;
+    --card: #FFFFFF;
+    --green: #1B5B33;      /* UTEAP masthead green */
+    --green-dark: #124024;
+    --copper: #BE5F33;     /* UTHealth accent */
+    --line: #E3E1D9;
+    --muted: #6E6A60;
+    --ok: #1B5B33;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Archivo', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    padding: 0 20px 80px;
+  }
+  .sheet { max-width: 720px; margin: 0 auto; }
+
+  /* Masthead — set like the newsletters this tool produces */
+  header { padding: 44px 0 0; }
+  .mast-title {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: clamp(38px, 8vw, 58px);
+    line-height: 0.95;
+    letter-spacing: -0.5px;
+    text-transform: none;
+  }
+  .mast-rule { height: 8px; background: var(--green); margin-top: 14px; }
+  .mast-sub {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding-top: 8px; font-size: 13px; color: var(--muted);
+  }
+  .mast-sub b { color: var(--ink); font-weight: 600; }
+
+  section { margin-top: 40px; }
+  h2 {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--green-dark); margin-bottom: 14px;
+  }
+
+  /* Drop zone */
+  #dropzone {
+    border: 1.5px dashed #B9B5A8; border-radius: 6px; background: var(--card);
+    padding: 34px 24px; text-align: center; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  #dropzone.drag { border-color: var(--green); background: #F2F7F0; }
+  #dropzone p { color: var(--muted); font-size: 14px; }
+  #dropzone .big { color: var(--ink); font-size: 16px; font-weight: 500; margin-bottom: 4px; }
+
+  .slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+  .slot {
+    background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+    padding: 12px 14px; font-size: 13px;
+  }
+  .slot .tag { font-weight: 600; }
+  .slot .state { color: var(--muted); margin-top: 2px; min-height: 1.4em; word-break: break-all; }
+  .slot.loaded { border-color: var(--green); }
+  .slot.loaded .state { color: var(--ok); }
+  .slot .date-row { margin-top: 8px; display: none; }
+  .slot.loaded .date-row { display: block; }
+  .slot label { font-size: 11px; color: var(--muted); display: block; }
+  .slot input[type=text] {
+    width: 100%; border: 1px solid var(--line); border-radius: 4px;
+    padding: 4px 6px; font: inherit; font-size: 13px;
+  }
+
+  /* Generate */
+  #generate {
+    margin-top: 26px; width: 100%; padding: 14px; border: 0; border-radius: 6px;
+    background: var(--green); color: #fff; font: 600 15px 'Archivo', sans-serif;
+    cursor: pointer; transition: background .15s;
+  }
+  #generate:hover:enabled { background: var(--green-dark); }
+  #generate:disabled { background: #C9C6BC; cursor: not-allowed; }
+
+  /* Results */
+  #results { display: none; }
+  .file-row {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; font-size: 14px;
+  }
+  .file-row .status { font-size: 12px; color: var(--muted); }
+  .file-row.done .status { color: var(--ok); font-weight: 600; }
+  .file-row a { color: var(--green-dark); font-weight: 500; }
+  #zipbtn {
+    margin-top: 14px; width: 100%; padding: 13px; border-radius: 6px;
+    border: 1.5px solid var(--copper); background: transparent; color: var(--copper);
+    font: 600 15px 'Archivo', sans-serif; cursor: pointer; display: none;
+  }
+  #zipbtn:hover { background: #FBF1EC; }
+  #error { color: #A3341F; font-size: 14px; margin-top: 12px; display: none; white-space: pre-wrap; }
+  footer { margin-top: 56px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; }
+  @media (max-width: 560px) { .slots { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header>
+    <div class="mast-title">FrontLine<br>Press</div>
+    <div class="mast-rule"></div>
+    <div class="mast-sub">
+      <span>Drop the month's 3 PDFs&nbsp;&nbsp;&bull;&nbsp;&nbsp;get all <b>9 branded editions</b></span>
+      <span>Files stay on this computer</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>1 &mdash; This month's PDFs</h2>
+    <div id="dropzone">
+      <p class="big">Drop FE.pdf, FS.pdf and SFE.pdf here</p>
+      <p>or click to choose files &mdash; names just need to contain FE, FS or SFE</p>
+      <input type="file" id="fileinput" accept="application/pdf" multiple hidden>
+    </div>
+    <div class="slots">
+      <div class="slot" id="slot-FE"><div class="tag">FE &mdash; Employee</div><div class="state">waiting for file</div>
+        <div class="date-row"><label>Date shown top-right</label><input type="text" data-base="FE"></div></div>
+      <div class="slot" id="slot-FS"><div class="tag">FS &mdash; Supervisor</div><div class="state">waiting for file</div>
+        <div class="date-row"><label>Date shown top-right</label><input type="text" data-base="FS"></div></div>
+      <div class="slot" id="slot-SFE"><div class="tag">SFE &mdash; Spanish</div><div class="state">waiting for file</div>
+        <div class="date-row"><label>Date shown top-right</label><input type="text" data-base="SFE"></div></div>
+    </div>
+    <button id="generate" disabled>Generate 9 PDFs</button>
+    <div id="error"></div>
+  </section>
+
+  <section id="results">
+    <h2>2 &mdash; Finished editions</h2>
+    <div id="filelist"></div>
+    <button id="zipbtn">Download all 9 as .zip</button>
+  </section>
+
+  <footer>
+    Header images are built into this app. To swap one, replace the file in the
+    <code>headers/</code> folder and redeploy.
+  </footer>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+// ---------------------------------------------------------------- config
+// Masthead region on page 1, in points from the TOP-LEFT: [x0, top, x1, bottom]
+const MASTHEAD = {
+  FE:  [0,  0, 612, 153],
+  SFE: [0,  0, 612, 151],
+  FS:  [31, 27, 574, 164],
+};
+
+// Final name -> [base, header file (null = keep original header)]
+const VARIANTS = [
+  ["Frontline Spanish.pdf",          "SFE", null],
+  ["UTEAP Frontline Employee.pdf",   "FE",  "UTEAP---Frontline-Employee-header.jpg"],
+  ["UTEAP Frontline Spanish.pdf",    "SFE", "UTEAP---Frontline-Spanish-Employee.jpg"],
+  ["UTEAP Frontline Supervisor.pdf", "FS",  "UTEAP---Frontline-Supervisor-header.jpg"],
+  ["UTMB Frontline Employee.pdf",    "FE",  "UTMB_Frontline_Employee_header.jpg"],
+  ["UTMB Frontline Supervisor.pdf",  "FS",  "UTMB_Frontline_Supervisor_header.jpg"],
+  ["UTH Frontline Employee.pdf",     "FE",  "UTH-EAP---Frontline-Employee-header.png"],
+  ["UTH Frontline Supervisor.pdf",   "FS",  "UTH-EAP---Frontline-Supervisor-header.png"],
+  ["UTH Frontline Spanish.pdf",      "SFE", "UTH-EAP---Frontline-Spanish-header.png"],
+];
+
+// ---------------------------------------------------------------- state
+const loaded = { FE: null, FS: null, SFE: null }; // {bytes, date:{text,rightX,baselineY,size}}
+const headerCache = {};
+let outputs = [];
+
+const $ = (id) => document.getElementById(id);
+const dz = $("dropzone"), fi = $("fileinput"), genBtn = $("generate"),
+      errBox = $("error"), results = $("results"), fileList = $("filelist"),
+      zipBtn = $("zipbtn");
+
+// ---------------------------------------------------------------- upload
+dz.addEventListener("click", () => fi.click());
+fi.addEventListener("change", () => takeFiles(fi.files));
+["dragover", "dragenter"].forEach(ev =>
+  dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add("drag"); }));
+["dragleave", "drop"].forEach(ev =>
+  dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove("drag"); }));
+dz.addEventListener("drop", e => takeFiles(e.dataTransfer.files));
+
+function identify(name) {
+  const n = name.toUpperCase();
+  if (n.includes("SFE") || n.includes("SPANISH")) return "SFE";
+  if (n.includes("FS") || n.includes("SUPERVISOR")) return "FS";
+  if (n.includes("FE") || n.includes("EMPLOYEE")) return "FE";
+  return null;
+}
+
+async function takeFiles(files) {
+  hideError();
+  for (const f of files) {
+    if (!f.name.toLowerCase().endsWith(".pdf")) continue;
+    const base = identify(f.name);
+    if (!base) { showError(`Couldn't tell which newsletter "${f.name}" is. Rename it to contain FE, FS or SFE.`); continue; }
+    try {
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      const date = await extractDate(bytes.slice());
+      loaded[base] = { bytes, date, name: f.name };
+      const slot = $("slot-" + base);
+      slot.classList.add("loaded");
+      slot.querySelector(".state").textContent = f.name + " ✓";
+      const input = slot.querySelector("input");
+      input.value = date ? date.text : "";
+      if (!date) slot.querySelector("label").textContent =
+        "Date not detected — type it to stamp it, or leave blank";
+    } catch (err) {
+      showError(`Couldn't read ${f.name}: ${err.message}`);
+    }
+  }
+  genBtn.disabled = !(loaded.FE && loaded.FS && loaded.SFE);
+}
+
+// Pull the month/year text from the top-right of page 1 via pdf.js
+async function extractDate(bytes) {
+  const doc = await pdfjsLib.getDocument({ data: bytes }).promise;
+  const page = await doc.getPage(1);
+  const pageH = page.getViewport({ scale: 1 }).height;
+  const tc = await page.getTextContent();
+  const items = tc.items
+    .filter(it => it.str.trim() && it.transform[5] > pageH - 60)
+    .sort((a, b) => a.transform[4] - b.transform[4]);
+  doc.destroy();
+  if (!items.length) return null;
+  let text = "", prevEnd = null;
+  let rightX = 0;
+  for (const it of items) {
+    const x = it.transform[4];
+    if (prevEnd !== null && x - prevEnd > 1.5) text += " ";
+    text += it.str;
+    prevEnd = x + it.width;
+    rightX = Math.max(rightX, x + it.width);
+  }
+  const t0 = items[0].transform;
+  return {
+    text: text.replace(/\s+/g, " ").trim(),
+    rightX,
+    baselineY: t0[5],
+    size: Math.hypot(t0[0], t0[1]),
+  };
+}
+
+// ---------------------------------------------------------------- generate
+genBtn.addEventListener("click", async () => {
+  genBtn.disabled = true;
+  genBtn.textContent = "Working…";
+  hideError();
+  outputs = [];
+  fileList.innerHTML = "";
+  results.style.display = "block";
+  zipBtn.style.display = "none";
+
+  const rows = {};
+  for (const [name] of VARIANTS) {
+    const row = document.createElement("div");
+    row.className = "file-row";
+    row.innerHTML = `<span>${name}</span><span class="status">queued</span>`;
+    fileList.appendChild(row);
+    rows[name] = row;
+  }
+
+  try {
+    for (const [name, base, header] of VARIANTS) {
+      rows[name].querySelector(".status").textContent = "building…";
+      const src = loaded[base];
+      let bytes;
+      if (header === null) {
+        bytes = src.bytes;
+      } else {
+        bytes = await buildVariant(src, base, header);
+      }
+      outputs.push({ name, bytes });
+      const row = rows[name];
+      row.classList.add("done");
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+      row.querySelector(".status").outerHTML =
+        `<span class="status">ready · <a href="${url}" download="${name}">download</a></span>`;
+    }
+    zipBtn.style.display = "block";
+  } catch (err) {
+    showError("Generation failed: " + err.message);
+  }
+  genBtn.textContent = "Generate 9 PDFs";
+  genBtn.disabled = false;
+});
+
+async function getHeader(file) {
+  if (!headerCache[file]) {
+    const res = await fetch("headers/" + encodeURIComponent(file));
+    if (!res.ok) throw new Error("Missing header image: " + file);
+    headerCache[file] = new Uint8Array(await res.arrayBuffer());
+  }
+  return headerCache[file];
+}
+
+const isPng = (b) => b[0] === 0x89 && b[1] === 0x50;
+
+async function buildVariant(src, base, headerFile) {
+  const { PDFDocument, rgb, StandardFonts } = PDFLib;
+  const doc = await PDFDocument.load(src.bytes);
+  const page = doc.getPage(0);
+  const pageH = page.getHeight();
+  const [x0, top, x1, bottom] = MASTHEAD[base];
+  const bw = x1 - x0, bh = bottom - top;
+
+  // 1. white-out the old masthead (slightly inflated)
+  page.drawRectangle({
+    x: x0 - 1, y: pageH - bottom - 1, width: bw + 2, height: bh + 2,
+    color: rgb(1, 1, 1),
+  });
+
+  // 2. fit the new header inside the box, centered (transparent PNGs land on white)
+  const imgBytes = await getHeader(headerFile);
+  const img = isPng(imgBytes) ? await doc.embedPng(imgBytes) : await doc.embedJpg(imgBytes);
+  const ar = img.width / img.height;
+  let w, h;
+  if (bw / bh > ar) { h = bh; w = bh * ar; } else { w = bw; h = bw / ar; }
+  page.drawImage(img, {
+    x: x0 + (bw - w) / 2,
+    y: pageH - bottom + (bh - h) / 2,
+    width: w, height: h,
+  });
+
+  // 3. re-stamp the month/year, right-aligned at its original spot
+  const slot = document.querySelector(`#slot-${base} input`);
+  const text = slot.value.trim();
+  if (text && src.date) {
+    const font = await doc.embedFont(StandardFonts.HelveticaBold);
+    const tw = font.widthOfTextAtSize(text, src.date.size);
+    page.drawText(text, {
+      x: src.date.rightX - tw,
+      y: src.date.baselineY,
+      size: src.date.size,
+      font, color: rgb(0, 0, 0),
+    });
+  }
+  return doc.save();
+}
+
+// ---------------------------------------------------------------- zip
+zipBtn.addEventListener("click", async () => {
+  zipBtn.textContent = "Zipping…";
+  const zip = new JSZip();
+  for (const o of outputs) zip.file(o.name, o.bytes);
+  const blob = await zip.generateAsync({ type: "blob" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const d = new Date();
+  a.download = `FrontLine ${d.toLocaleString("en-US",{month:"long"})} ${d.getFullYear()}.zip`;
+  a.click();
+  zipBtn.textContent = "Download all 9 as .zip";
+});
+
+function showError(msg) { errBox.textContent = msg; errBox.style.display = "block"; }
+function hideError() { errBox.style.display = "none"; }
+</script>
+</body>
+</html>
