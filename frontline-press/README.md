@@ -30,18 +30,16 @@ Option B — GitHub:
 
 ## Monthly Features images (for Constant Contact)
 
-1. Open the Monthly Features page on Resources for Living (link in the app)
-   and save the 4 images (right-click → Save Image As)
-2. Drop them into the "Monthly Features images" section of the app
-3. Click "Download all 4 as .zip" (or download each one)
+1. Save the images from the Resources for Living Monthly Features page
+   (right-click → Save Image As)
+2. Drop them into the "Monthly Features images" box in the app
+3. Click "Download all as .zip" (or download each one)
 
-Each image is re-saved as a standard RGB JPEG on a white background and named
-`MonthlyFeatures_MainFeature.jpg`, `MonthlyFeatures_Box1.jpg`,
-`MonthlyFeatures_Box2.jpg` and `MonthlyFeatures_Box3.jpg`. That fixes files
-that are really WebP/PNG, or progressive/CMYK JPEGs, which Constant Contact
-won't display. Files are matched by name (MainFeature, Box1, Box2, Box3);
-anything unrecognised fills the next empty slot. To change the names, edit
-`FEATURE_IMAGES` in `index.html`.
+Each image is re-saved as a standard RGB JPEG on a white background and keeps
+its original name with a `.jpg` extension (e.g. `MonthlyFeatures_Box1.webp` →
+`MonthlyFeatures_Box1.jpg`). That fixes files that are really WebP/PNG, or
+progressive/CMYK JPEGs, which Constant Contact won't display. Dropping a file
+with the same name again replaces the earlier one.
 
 ## Changing a header
 

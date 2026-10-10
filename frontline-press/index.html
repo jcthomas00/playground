@@ -110,9 +110,7 @@
   footer { margin-top: 56px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; }
   @media (max-width: 560px) { .slots { grid-template-columns: 1fr; } }
 
-  /* Monthly Features images */
-  .section-note { font-size: 14px; color: var(--muted); margin-bottom: 12px; }
-  .section-note a { color: var(--green-dark); font-weight: 500; }
+  /* Image conversion */
   #imgdrop {
     border: 1.5px dashed #B9B5A8; border-radius: 6px; background: var(--card);
     padding: 26px 24px; text-align: center; cursor: pointer;
@@ -121,30 +119,17 @@
   #imgdrop.drag { border-color: var(--green); background: #F2F7F0; }
   #imgdrop p { color: var(--muted); font-size: 14px; }
   #imgdrop .big { color: var(--ink); font-size: 16px; font-weight: 500; margin-bottom: 4px; }
-  .img-slots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
-  .img-slot {
-    background: var(--card); border: 1px solid var(--line); border-radius: 6px;
-    padding: 10px; font-size: 13px; display: flex; gap: 10px; align-items: center;
-  }
-  .img-slot.loaded { border-color: var(--green); }
-  .img-slot .thumb {
-    width: 72px; height: 54px; flex: none; border-radius: 4px; background: #F1EFE8;
-    object-fit: cover; display: block;
-  }
-  .img-slot .meta { min-width: 0; }
-  .img-slot .tag { font-weight: 600; word-break: break-all; }
-  .img-slot .state { color: var(--muted); word-break: break-all; }
-  .img-slot.loaded .state { color: var(--ok); }
-  .img-slot a { color: var(--green-dark); font-weight: 500; }
+  #imglist { margin-top: 12px; }
+  #imglist .file-row { gap: 12px; }
+  #imglist .thumb { width: 48px; height: 36px; flex: none; border-radius: 3px; object-fit: cover; background: #F1EFE8; }
+  #imglist .fname { flex: 1; min-width: 0; word-break: break-all; }
   #imgzip {
-    margin-top: 14px; width: 100%; padding: 13px; border-radius: 6px;
+    margin-top: 6px; width: 100%; padding: 13px; border-radius: 6px;
     border: 1.5px solid var(--copper); background: transparent; color: var(--copper);
-    font: 600 15px 'Archivo', sans-serif; cursor: pointer;
+    font: 600 15px 'Archivo', sans-serif; cursor: pointer; display: none;
   }
-  #imgzip:hover:enabled { background: #FBF1EC; }
-  #imgzip:disabled { border-color: #C9C6BC; color: #C9C6BC; cursor: not-allowed; }
+  #imgzip:hover { background: #FBF1EC; }
   #imgerror { color: #A3341F; font-size: 14px; margin-top: 12px; display: none; white-space: pre-wrap; }
-  @media (max-width: 560px) { .img-slots { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -186,18 +171,13 @@
 
   <section id="features">
     <h2>Monthly Features images</h2>
-    <p class="section-note">
-      Save the four images from the
-      <a href="https://www.resourcesforliving.com/home/resources/monthly-features" target="_blank" rel="noopener">Monthly Features page</a>
-      and drop them here. Each one is re-saved as a standard JPEG that Constant Contact can display.
-    </p>
     <div id="imgdrop">
-      <p class="big">Drop the 4 Monthly Features images here</p>
-      <p>or click to choose &mdash; names containing Box1, Box2, Box3 or MainFeature are matched automatically</p>
+      <p class="big">Drop images here</p>
+      <p>or click to choose &mdash; each is re-saved as a standard .jpg with the same name</p>
       <input type="file" id="imginput" accept="image/*" multiple hidden>
     </div>
-    <div class="img-slots" id="imgslots"></div>
-    <button id="imgzip" disabled>Download all 4 as .zip</button>
+    <div id="imglist"></div>
+    <button id="imgzip">Download all as .zip</button>
     <div id="imgerror"></div>
   </section>
 
@@ -426,29 +406,14 @@ zipBtn.addEventListener("click", async () => {
 function showError(msg) { errBox.textContent = msg; errBox.style.display = "block"; }
 function hideError() { errBox.style.display = "none"; }
 
-// ---------------------------------------------------------------- monthly features images
-// Output name -> pattern that recognises the downloaded file
-const FEATURE_IMAGES = [
-  ["MonthlyFeatures_MainFeature.jpg", /MAIN/],
-  ["MonthlyFeatures_Box1.jpg",        /BOX[\s_-]*1/],
-  ["MonthlyFeatures_Box2.jpg",        /BOX[\s_-]*2/],
-  ["MonthlyFeatures_Box3.jpg",        /BOX[\s_-]*3/],
-];
+// ---------------------------------------------------------------- image conversion
+// Every dropped image is re-encoded as a baseline sRGB JPEG and keeps its own
+// name with a .jpg extension (e.g. MonthlyFeatures_Box1.webp -> MonthlyFeatures_Box1.jpg).
 const JPEG_QUALITY = 0.92;
-const featureOut = {}; // output name -> Blob
+const imageOut = new Map(); // output name -> { blob, url, row }
 
-const imgDrop = $("imgdrop"), imgInput = $("imginput"), imgSlots = $("imgslots"),
+const imgDrop = $("imgdrop"), imgInput = $("imginput"), imgList = $("imglist"),
       imgZip = $("imgzip"), imgErr = $("imgerror");
-
-for (const [name] of FEATURE_IMAGES) {
-  const el = document.createElement("div");
-  el.className = "img-slot";
-  el.dataset.name = name;
-  el.innerHTML = `<img class="thumb" alt=""><div class="meta"><div class="tag">${name}</div>
-    <div class="state">waiting for image</div></div>`;
-  el.querySelector(".thumb").style.visibility = "hidden";
-  imgSlots.appendChild(el);
-}
 
 imgDrop.addEventListener("click", () => imgInput.click());
 imgInput.addEventListener("change", () => { takeImages(imgInput.files); imgInput.value = ""; });
@@ -458,11 +423,7 @@ imgInput.addEventListener("change", () => { takeImages(imgInput.files); imgInput
   imgDrop.addEventListener(ev, e => { e.preventDefault(); imgDrop.classList.remove("drag"); }));
 imgDrop.addEventListener("drop", e => takeImages(e.dataTransfer.files));
 
-function matchFeature(fileName) {
-  const n = fileName.toUpperCase();
-  const hit = FEATURE_IMAGES.find(([, re]) => re.test(n));
-  return hit ? hit[0] : null;
-}
+const jpgName = (name) => name.replace(/\.[^./\\]+$/, "") + ".jpg";
 
 async function takeImages(fileList) {
   const files = Array.from(fileList); // copy: the input is reset while we work
@@ -470,28 +431,28 @@ async function takeImages(fileList) {
   const problems = [];
   for (const f of files) {
     if (!f.type.startsWith("image/") && !/\.(jpe?g|png|gif|webp|bmp|avif)$/i.test(f.name)) continue;
-    // Recognised by name; otherwise fill the first empty slot
-    const target = matchFeature(f.name) ||
-      FEATURE_IMAGES.map(([n]) => n).find(n => !featureOut[n]);
-    if (!target) { problems.push(`"${f.name}" doesn't match a slot and all 4 are full.`); continue; }
+    const name = jpgName(f.name);
     try {
       const blob = await toPlainJpeg(f);
-      featureOut[target] = blob;
-      const slot = imgSlots.querySelector(`[data-name="${target}"]`);
+      const prev = imageOut.get(name);
+      if (prev) URL.revokeObjectURL(prev.url);  // same name dropped again: replace it
       const url = URL.createObjectURL(blob);
-      slot.classList.add("loaded");
-      const thumb = slot.querySelector(".thumb");
-      thumb.src = url; thumb.style.visibility = "visible";
-      slot.querySelector(".state").innerHTML =
-        `from ${escapeHtml(f.name)} · <a href="${url}" download="${target}">download</a>`;
+      const row = prev ? prev.row : imgList.appendChild(document.createElement("div"));
+      row.className = "file-row done";
+      row.innerHTML = `<img class="thumb" alt=""><span class="fname"></span>
+        <span class="status">ready · <a download>download</a></span>`;
+      row.querySelector(".thumb").src = url;
+      row.querySelector(".fname").textContent = name;
+      const a = row.querySelector("a");
+      a.href = url; a.download = name;
+      imageOut.set(name, { blob, url, row });
     } catch (err) {
       problems.push(`Couldn't convert "${f.name}": ${err.message}`);
     }
   }
   if (problems.length) { imgErr.textContent = problems.join("\n"); imgErr.style.display = "block"; }
-  imgZip.disabled = Object.keys(featureOut).length === 0;
-  const count = Object.keys(featureOut).length;
-  imgZip.textContent = count === 4 ? "Download all 4 as .zip" : `Download ${count} of 4 as .zip`;
+  imgZip.style.display = imageOut.size ? "block" : "none";
+  imgZip.textContent = `Download all ${imageOut.size} as .zip`;
 }
 
 // Decode whatever the browser can read (WebP, PNG, progressive/CMYK JPEG…) and
@@ -520,15 +481,11 @@ async function toPlainJpeg(file) {
   }
 }
 
-function escapeHtml(s) {
-  return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}
-
 imgZip.addEventListener("click", async () => {
   const label = imgZip.textContent;
   imgZip.textContent = "Zipping…";
   const zip = new JSZip();
-  for (const [name, blob] of Object.entries(featureOut)) zip.file(name, blob);
+  for (const [name, { blob }] of imageOut) zip.file(name, blob);
   const blob = await zip.generateAsync({ type: "blob" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
