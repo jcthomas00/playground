@@ -28,6 +28,21 @@ Option B — GitHub:
 3. Check the auto-detected date fields (e.g. "July 2026" / "Julio de 2026")
 4. Click "Generate 9 PDFs", then "Download all 9 as .zip"
 
+## Monthly Features images (for Constant Contact)
+
+1. Open the Monthly Features page on Resources for Living (link in the app)
+   and save the 4 images (right-click → Save Image As)
+2. Drop them into the "Monthly Features images" section of the app
+3. Click "Download all 4 as .zip" (or download each one)
+
+Each image is re-saved as a standard RGB JPEG on a white background and named
+`MonthlyFeatures_MainFeature.jpg`, `MonthlyFeatures_Box1.jpg`,
+`MonthlyFeatures_Box2.jpg` and `MonthlyFeatures_Box3.jpg`. That fixes files
+that are really WebP/PNG, or progressive/CMYK JPEGs, which Constant Contact
+won't display. Files are matched by name (MainFeature, Box1, Box2, Box3);
+anything unrecognised fills the next empty slot. To change the names, edit
+`FEATURE_IMAGES` in `index.html`.
+
 ## Changing a header
 
 Replace the image in the `headers/` folder (keep the same filename) and

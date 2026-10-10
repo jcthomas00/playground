@@ -109,6 +109,42 @@
   #error { color: #A3341F; font-size: 14px; margin-top: 12px; display: none; white-space: pre-wrap; }
   footer { margin-top: 56px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; }
   @media (max-width: 560px) { .slots { grid-template-columns: 1fr; } }
+
+  /* Monthly Features images */
+  .section-note { font-size: 14px; color: var(--muted); margin-bottom: 12px; }
+  .section-note a { color: var(--green-dark); font-weight: 500; }
+  #imgdrop {
+    border: 1.5px dashed #B9B5A8; border-radius: 6px; background: var(--card);
+    padding: 26px 24px; text-align: center; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  #imgdrop.drag { border-color: var(--green); background: #F2F7F0; }
+  #imgdrop p { color: var(--muted); font-size: 14px; }
+  #imgdrop .big { color: var(--ink); font-size: 16px; font-weight: 500; margin-bottom: 4px; }
+  .img-slots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
+  .img-slot {
+    background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px; font-size: 13px; display: flex; gap: 10px; align-items: center;
+  }
+  .img-slot.loaded { border-color: var(--green); }
+  .img-slot .thumb {
+    width: 72px; height: 54px; flex: none; border-radius: 4px; background: #F1EFE8;
+    object-fit: cover; display: block;
+  }
+  .img-slot .meta { min-width: 0; }
+  .img-slot .tag { font-weight: 600; word-break: break-all; }
+  .img-slot .state { color: var(--muted); word-break: break-all; }
+  .img-slot.loaded .state { color: var(--ok); }
+  .img-slot a { color: var(--green-dark); font-weight: 500; }
+  #imgzip {
+    margin-top: 14px; width: 100%; padding: 13px; border-radius: 6px;
+    border: 1.5px solid var(--copper); background: transparent; color: var(--copper);
+    font: 600 15px 'Archivo', sans-serif; cursor: pointer;
+  }
+  #imgzip:hover:enabled { background: #FBF1EC; }
+  #imgzip:disabled { border-color: #C9C6BC; color: #C9C6BC; cursor: not-allowed; }
+  #imgerror { color: #A3341F; font-size: 14px; margin-top: 12px; display: none; white-space: pre-wrap; }
+  @media (max-width: 560px) { .img-slots { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -146,6 +182,23 @@
     <h2>2 &mdash; Finished editions</h2>
     <div id="filelist"></div>
     <button id="zipbtn">Download all 9 as .zip</button>
+  </section>
+
+  <section id="features">
+    <h2>Monthly Features images</h2>
+    <p class="section-note">
+      Save the four images from the
+      <a href="https://www.resourcesforliving.com/home/resources/monthly-features" target="_blank" rel="noopener">Monthly Features page</a>
+      and drop them here. Each one is re-saved as a standard JPEG that Constant Contact can display.
+    </p>
+    <div id="imgdrop">
+      <p class="big">Drop the 4 Monthly Features images here</p>
+      <p>or click to choose &mdash; names containing Box1, Box2, Box3 or MainFeature are matched automatically</p>
+      <input type="file" id="imginput" accept="image/*" multiple hidden>
+    </div>
+    <div class="img-slots" id="imgslots"></div>
+    <button id="imgzip" disabled>Download all 4 as .zip</button>
+    <div id="imgerror"></div>
   </section>
 
   <footer>
@@ -372,6 +425,118 @@ zipBtn.addEventListener("click", async () => {
 
 function showError(msg) { errBox.textContent = msg; errBox.style.display = "block"; }
 function hideError() { errBox.style.display = "none"; }
+
+// ---------------------------------------------------------------- monthly features images
+// Output name -> pattern that recognises the downloaded file
+const FEATURE_IMAGES = [
+  ["MonthlyFeatures_MainFeature.jpg", /MAIN/],
+  ["MonthlyFeatures_Box1.jpg",        /BOX[\s_-]*1/],
+  ["MonthlyFeatures_Box2.jpg",        /BOX[\s_-]*2/],
+  ["MonthlyFeatures_Box3.jpg",        /BOX[\s_-]*3/],
+];
+const JPEG_QUALITY = 0.92;
+const featureOut = {}; // output name -> Blob
+
+const imgDrop = $("imgdrop"), imgInput = $("imginput"), imgSlots = $("imgslots"),
+      imgZip = $("imgzip"), imgErr = $("imgerror");
+
+for (const [name] of FEATURE_IMAGES) {
+  const el = document.createElement("div");
+  el.className = "img-slot";
+  el.dataset.name = name;
+  el.innerHTML = `<img class="thumb" alt=""><div class="meta"><div class="tag">${name}</div>
+    <div class="state">waiting for image</div></div>`;
+  el.querySelector(".thumb").style.visibility = "hidden";
+  imgSlots.appendChild(el);
+}
+
+imgDrop.addEventListener("click", () => imgInput.click());
+imgInput.addEventListener("change", () => { takeImages(imgInput.files); imgInput.value = ""; });
+["dragover", "dragenter"].forEach(ev =>
+  imgDrop.addEventListener(ev, e => { e.preventDefault(); imgDrop.classList.add("drag"); }));
+["dragleave", "drop"].forEach(ev =>
+  imgDrop.addEventListener(ev, e => { e.preventDefault(); imgDrop.classList.remove("drag"); }));
+imgDrop.addEventListener("drop", e => takeImages(e.dataTransfer.files));
+
+function matchFeature(fileName) {
+  const n = fileName.toUpperCase();
+  const hit = FEATURE_IMAGES.find(([, re]) => re.test(n));
+  return hit ? hit[0] : null;
+}
+
+async function takeImages(fileList) {
+  const files = Array.from(fileList); // copy: the input is reset while we work
+  imgErr.style.display = "none";
+  const problems = [];
+  for (const f of files) {
+    if (!f.type.startsWith("image/") && !/\.(jpe?g|png|gif|webp|bmp|avif)$/i.test(f.name)) continue;
+    // Recognised by name; otherwise fill the first empty slot
+    const target = matchFeature(f.name) ||
+      FEATURE_IMAGES.map(([n]) => n).find(n => !featureOut[n]);
+    if (!target) { problems.push(`"${f.name}" doesn't match a slot and all 4 are full.`); continue; }
+    try {
+      const blob = await toPlainJpeg(f);
+      featureOut[target] = blob;
+      const slot = imgSlots.querySelector(`[data-name="${target}"]`);
+      const url = URL.createObjectURL(blob);
+      slot.classList.add("loaded");
+      const thumb = slot.querySelector(".thumb");
+      thumb.src = url; thumb.style.visibility = "visible";
+      slot.querySelector(".state").innerHTML =
+        `from ${escapeHtml(f.name)} · <a href="${url}" download="${target}">download</a>`;
+    } catch (err) {
+      problems.push(`Couldn't convert "${f.name}": ${err.message}`);
+    }
+  }
+  if (problems.length) { imgErr.textContent = problems.join("\n"); imgErr.style.display = "block"; }
+  imgZip.disabled = Object.keys(featureOut).length === 0;
+  const count = Object.keys(featureOut).length;
+  imgZip.textContent = count === 4 ? "Download all 4 as .zip" : `Download ${count} of 4 as .zip`;
+}
+
+// Decode whatever the browser can read (WebP, PNG, progressive/CMYK JPEG…) and
+// re-encode as a baseline sRGB JPEG on a white background.
+async function toPlainJpeg(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error("the browser can't read this image"));
+      i.src = url;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+    return await new Promise((resolve, reject) =>
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error("JPEG encoding failed")),
+                    "image/jpeg", JPEG_QUALITY));
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+imgZip.addEventListener("click", async () => {
+  const label = imgZip.textContent;
+  imgZip.textContent = "Zipping…";
+  const zip = new JSZip();
+  for (const [name, blob] of Object.entries(featureOut)) zip.file(name, blob);
+  const blob = await zip.generateAsync({ type: "blob" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const d = new Date();
+  a.download = `Monthly Features ${d.toLocaleString("en-US",{month:"long"})} ${d.getFullYear()}.zip`;
+  a.click();
+  imgZip.textContent = label;
+});
 </script>
 </body>
 </html>
